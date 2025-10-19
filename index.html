@@ -92,10 +92,44 @@
     const videoContainer = document.getElementById('video_container');
 
     const ANIMAL_IMAGES = [
-        { type: 'CAT', url: 'CATS/BAĞIRAN KEDİ.png', active: true },
-        /* ... (rest of images omitted for brevity - keep your full array) ... */
-    ];
-    // If you paste full array, keep the original list.
+            // --- CATS ---
+            { type: 'CAT', url: 'CATS/BAĞIRAN KEDİ.png', active: true },
+            { type: 'CAT', url: 'CATS/Bahtsız Kedi.png', active: true },
+            { type: 'CAT', url: 'CATS/Duran Kedi.png', active: true },
+            { type: 'CAT', url: 'CATS/Gamer Kedi.png', active: true },
+            { type: 'CAT', url: 'CATS/Kırgın Kedi....png', active: true },
+            { type: 'CAT', url: 'CATS/KORKMUŞ KEDİ.png', active: true },
+            { type: 'CAT', url: 'CATS/Köylü Kedi.png', active: true },
+            { type: 'CAT', url: 'CATS/Menajer Kedi.png', active: true },
+            { type: 'CAT', url: 'CATS/Minecraft Keddy.png', active: true },
+            { type: 'CAT', url: 'CATS/Punk Kedi!.png', active: true },
+            { type: 'CAT', url: 'CATS/Romantik Keddy.png', active: true },
+            { type: 'CAT', url: 'CATS/şÜPHELİ kEDİ.png', active: true },
+            { type: 'CAT', url: 'CATS/TOST KEDDY.png', active: true },
+            { type: 'CAT', url: 'CATS/Uzaylı Kedi.png', active: true },
+            
+            // --- DOGS ---
+            { type: 'DOG', url: 'DOGS/Akbaş.png', active: true },
+            { type: 'DOG', url: 'DOGS/Arap Köpeği.png', active: true },
+            { type: 'DOG', url: 'DOGS/Dişil Enerji Köpek.png', active: true },
+            { type: 'DOG', url: 'DOGS/Enik Köpek.png', active: true },
+            { type: 'DOG', url: 'DOGS/Huzurlu Köpek.png', active: true },
+            { type: 'DOG', url: 'DOGS/Issız Köpek.png', active: true },
+            { type: 'DOG', url: 'DOGS/Mazlum Köpek.png', active: true },
+            { type: 'DOG', url: 'DOGS/Romantik Köpiş.png', active: true },
+            { type: 'DOG', url: 'DOGS/Sırıtan Köpek.png', active: true },
+            { type: 'DOG', url: 'DOGS/Yarışçı Köpek.png', active: true },
+            { type: 'DOG', url: 'DOGS/Aşçı Köpek.png', active: true },
+            { type: 'DOG', url: 'DOGS/DOG RIDER.png', active: true },
+            { type: 'DOG', url: 'DOGS/Fakir Köpke.png', active: true },
+            { type: 'DOG', url: 'DOGS/Hawlı Köpek.png', active: true },
+            { type: 'DOG', url: 'DOGS/Miğferli Köpek.png', active: true },
+            { type: 'DOG', url: 'DOGS/Minecraft Doggy.png', active: true },
+            { type: 'DOG', url: 'DOGS/Şaşırmış Köpek.png', active: true },
+            { type: 'DOG', url: 'DOGS/Şüpheli Köpek.png', active: true },
+            { type: 'DOG', url: 'DOGS/TOST KÖPEK.png', active: true },
+            { type: 'DOG', url: 'DOGS/Yönetici Köpek.png', active: true },
+        ];
 
     // utility to detect mobile/phone (simple and robust)
     function isMobileDevice() {
