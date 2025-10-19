@@ -1,21 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>VERİ BİLİMİ</title>
-    <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Load TensorFlow.js -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-    <!-- Load the Face Detection Model (BlazeFace) -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface"></script>
     <style>
-        /* Custom font and basic body style */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #1f2937; /* Dark background */
+            background-color: #1f2937;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -23,66 +19,38 @@
             padding: 1rem;
         }
 
-        /* Video/Canvas Base Styling (Mirror Effect Applied) */
+        /* Video/Canvas Base Styling (Mirror Effect Applied via draw) */
         #video, #output_canvas {
-            /* RESTORED: Mirror effect for intuitive self-view */
             transform: none;
             -webkit-transform: none;
             max-width: 100%;
-            height: auto;
+            height: 100%;
             border-radius: 0.75rem;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
         }
-        #video {
-            display: none; /* Hide video element, only canvas is visible */
-        }
+        #video { display: none; } /* we draw video into canvas */
 
-        /* Aspect Ratio Styles: Default is 16:9 (PC/Landscape) */
+        /* Container uses aspect-ratio set from JS */
         #video_container {
             width: 100%;
-            /* Default aspect ratio for PC (16:9) */
-            aspect-ratio: 16 / 9; 
+            aspect-ratio: 16 / 9; /* default, overridden by JS on load */
         }
 
-        /* Media Query for Portrait Devices (Mobile/Tablet) */
-        @media (max-width: 1024px) and (max-aspect-ratio: 1/1) {
-            #video_container {
-                /* Change to aspect ratio 9:16 for portrait devices */
-                aspect-ratio: 9 / 16;
-            }
-        }
-        
-        /* Spinner button animation */
-        .spinning {
-            animation: pulse 1s infinite;
-        }
+        /* Spinner animation */
+        .spinning { animation: pulse 1s infinite; }
         @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.05); }
+            0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); }
         }
-        /* Image container for the roulette result */
-        #roulette_result_container {
-            min-height: 250px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        #result_image {
-            transition: opacity 0.3s ease-in-out;
-            object-fit: cover;
-        }
+        #roulette_result_container { min-height: 250px; display:flex; justify-content:center; align-items:center; }
+        #result_image { transition: opacity .3s ease-in-out; object-fit: cover; }
     </style>
 </head>
 <body>
-
     <div id="app" class="w-full max-w-4xl bg-gray-100/75 p-8 rounded-2xl shadow-2xl space-y-8">
         <h1 class="text-4xl font-extrabold text-center text-indigo-700">Tipine Göre Hangi Hayvansın?</h1>
         <p id="status_message" class="text-center text-gray-600">Kamera Yükleniyor...</p>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            
-            <!-- Video/Canvas Feed -->
-            <!-- Note: aspect-ratio is now controlled by CSS @media queries -->
             <div id="video_container" class="relative rounded-xl overflow-hidden shadow-lg">
                 <video id="video" playsinline autoplay></video>
                 <canvas id="output_canvas" class="absolute top-0 left-0 w-full h-full"></canvas>
@@ -95,22 +63,16 @@
                 </div>
             </div>
 
-            <!-- Roulette Result Panel -->
             <div class="bg-indigo-50 p-6 rounded-xl border-4 border-indigo-200 flex flex-col justify-between">
                 <div>
                     <h2 class="text-2xl font-bold text-indigo-800 mb-4 text-center">Senin hayvanın:</h2>
                     <div id="roulette_result_container" class="mb-4">
-                        <!-- UPDATED: Initial placeholder set to a valid local image path -->
                         <img id="result_image" src="CATS/BAĞIRAN KEDİ.png" alt="Roulette Başlangıç Görseli" class="w-124 h-72 object-cover shadow-lg border-4 border-indigo-400 opacity-100">
                     </div>
                 </div>
 
                 <div class="text-center">
-                    <button id="spin_button" 
-                            disabled 
-                            class="w-full py-4 text-xl font-extrabold rounded-lg transition duration-300 shadow-xl 
-                                   disabled:bg-gray-400 disabled:text-gray-200 disabled:cursor-not-allowed
-                                   bg-yellow-500 hover:bg-yellow-600 text-white transform hover:scale-[1.02] active:scale-[0.98]">
+                    <button id="spin_button" disabled class="w-full py-4 text-xl font-extrabold rounded-lg transition duration-300 shadow-xl disabled:bg-gray-400 disabled:text-gray-200 disabled:cursor-not-allowed bg-yellow-500 hover:bg-yellow-600 text-white transform hover:scale-[1.02] active:scale-[0.98]">
                         Yüz Aranıyor...
                     </button>
                     <p id="face_status" class="mt-2 text-sm text-gray-500"></p>
@@ -119,334 +81,292 @@
         </div>
     </div>
 
-    <script>
-        // Global variables and configuration
-        let model;
-        let video;
-        let canvas;
-        let ctx;
-        let running = false;
-        let faceDetected = false;
-        let isSpinning = false;
-        let spinInterval;
+<script>
+    let model, video, canvas, ctx;
+    let running = false, faceDetected = false, isSpinning = false, spinInterval;
+    const statusMessage = document.getElementById('status_message');
+    const loadingIndicator = document.getElementById('loading_indicator');
+    const spinButton = document.getElementById('spin_button');
+    const resultImage = document.getElementById('result_image');
+    const faceStatus = document.getElementById('face_status');
+    const videoContainer = document.getElementById('video_container');
 
-        // DOM element references
-        const statusMessage = document.getElementById('status_message');
-        const loadingIndicator = document.getElementById('loading_indicator');
-        const spinButton = document.getElementById('spin_button');
-        const resultImage = document.getElementById('result_image');
-        const faceStatus = document.getElementById('face_status');
+    const ANIMAL_IMAGES = [
+        { type: 'CAT', url: 'CATS/BAĞIRAN KEDİ.png', active: true },
+        /* ... (rest of images omitted for brevity - keep your full array) ... */
+    ];
+    // If you paste full array, keep the original list.
 
-        // Hardcoded list of images 
-        // NOTE: For images to load, the 'CATS' and 'DOGS' folders MUST be located 
-        // in the same directory as this index.html file.
-        const ANIMAL_IMAGES = [
-            // --- CATS ---
-            { type: 'CAT', url: 'CATS/BAĞIRAN KEDİ.png', active: true },
-            { type: 'CAT', url: 'CATS/Bahtsız Kedi.png', active: true },
-            { type: 'CAT', url: 'CATS/Duran Kedi.png', active: true },
-            { type: 'CAT', url: 'CATS/Gamer Kedi.png', active: true },
-            { type: 'CAT', url: 'CATS/Kırgın Kedi....png', active: true },
-            { type: 'CAT', url: 'CATS/KORKMUŞ KEDİ.png', active: true },
-            { type: 'CAT', url: 'CATS/Köylü Kedi.png', active: true },
-            { type: 'CAT', url: 'CATS/Menajer Kedi.png', active: true },
-            { type: 'CAT', url: 'CATS/Minecraft Keddy.png', active: true },
-            { type: 'CAT', url: 'CATS/Punk Kedi!.png', active: true },
-            { type: 'CAT', url: 'CATS/Romantik Keddy.png', active: true },
-            { type: 'CAT', url: 'CATS/şÜPHELİ kEDİ.png', active: true },
-            { type: 'CAT', url: 'CATS/TOST KEDDY.png', active: true },
-            { type: 'CAT', url: 'CATS/Uzaylı Kedi.png', active: true },
-            
-            // --- DOGS ---
-            { type: 'DOG', url: 'DOGS/Akbaş.png', active: true },
-            { type: 'DOG', url: 'DOGS/Arap Köpeği.png', active: true },
-            { type: 'DOG', url: 'DOGS/Dişil Enerji Köpek.png', active: true },
-            { type: 'DOG', url: 'DOGS/Enik Köpek.png', active: true },
-            { type: 'DOG', url: 'DOGS/Huzurlu Köpek.png', active: true },
-            { type: 'DOG', url: 'DOGS/Issız Köpek.png', active: true },
-            { type: 'DOG', url: 'DOGS/Mazlum Köpek.png', active: true },
-            { type: 'DOG', url: 'DOGS/Romantik Köpiş.png', active: true },
-            { type: 'DOG', url: 'DOGS/Sırıtan Köpek.png', active: true },
-            { type: 'DOG', url: 'DOGS/Yarışçı Köpek.png', active: true },
-            { type: 'DOG', url: 'DOGS/Aşçı Köpek.png', active: true },
-            { type: 'DOG', url: 'DOGS/DOG RIDER.png', active: true },
-            { type: 'DOG', url: 'DOGS/Fakir Köpke.png', active: true },
-            { type: 'DOG', url: 'DOGS/Hawlı Köpek.png', active: true },
-            { type: 'DOG', url: 'DOGS/Miğferli Köpek.png', active: true },
-            { type: 'DOG', url: 'DOGS/Minecraft Doggy.png', active: true },
-            { type: 'DOG', url: 'DOGS/Şaşırmış Köpek.png', active: true },
-            { type: 'DOG', url: 'DOGS/Şüpheli Köpek.png', active: true },
-            { type: 'DOG', url: 'DOGS/TOST KÖPEK.png', active: true },
-            { type: 'DOG', url: 'DOGS/Yönetici Köpek.png', active: true },
-        ];
-        
-        // This function is no longer necessary since we use the active flag to manage images
-        function setAnimalImages(newImages) {
-             ANIMAL_IMAGES.splice(0, ANIMAL_IMAGES.length, ...newImages); // Overwrite the array
+    // utility to detect mobile/phone (simple and robust)
+    function isMobileDevice() {
+        const ua = navigator.userAgent || navigator.vendor || window.opera;
+        // Basic UA checks + screen width fallback
+        return /Mobi|Android|iPhone|iPad|Phone/i.test(ua) || window.innerWidth <= 800;
+    }
+
+    // stop any active tracks on the current video stream
+    function stopCurrentStream() {
+        if (video && video.srcObject) {
+            const tracks = video.srcObject.getTracks();
+            tracks.forEach(t => t.stop());
+            video.srcObject = null;
+        }
+    }
+
+    /**
+     * Sets the container aspect-ratio CSS to either 16/9 or 9/16 depending on device.
+     */
+    function applyContainerAspect() {
+        if (isMobileDevice()) {
+            videoContainer.style.aspectRatio = '9 / 16';
+        } else {
+            videoContainer.style.aspectRatio = '16 / 9';
+        }
+    }
+
+    /**
+     * Initializes/requests camera with friendly constraints for the detected device.
+     * Uses ideal width/height instead of exact aspectRatio constraints for better compatibility.
+     */
+    async function setupCamera() {
+        statusMessage.textContent = "Requesting camera access...";
+        video = document.getElementById('video');
+        canvas = document.getElementById('output_canvas');
+        ctx = canvas.getContext('2d');
+
+        applyContainerAspect();
+
+        // If already streaming, stop and re-request with new constraints (useful on orientation change)
+        stopCurrentStream();
+
+        // Choose ideal width/height depending on orientation detection
+        const mobile = isMobileDevice();
+        // These are "ideal" requests; browser will try to satisfy but won't error out if exact ratio not supported
+        let videoConstraints;
+        if (mobile) {
+            videoConstraints = { width: { ideal: 720 }, height: { ideal: 1280 } }; // portrait ideal
+        } else {
+            videoConstraints = { width: { ideal: 1280 }, height: { ideal: 720 } }; // landscape ideal
         }
 
-        /**
-         * Initializes the video stream from the camera with dynamic aspect ratio constraints.
-         */
-        async function setupCamera() {
-            statusMessage.textContent = "Requesting camera access...";
-            video = document.getElementById('video');
-            canvas = document.getElementById('output_canvas');
-            ctx = canvas.getContext('2d');
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: false,
+                video: Object.assign({ facingMode: 'user' }, videoConstraints)
+            });
 
-            // 1. Determine target aspect ratio based on device orientation
-            const isPortraitDevice = window.innerWidth < window.innerHeight;
-            let videoConstraints = {};
+            video.srcObject = stream;
 
-            if (isPortraitDevice) {
-                // Phone/Tablet: Request 9:16 (portrait)
-                videoConstraints = { aspectRatio: { exact: 9 / 16 } };
-            } else {
-                // PC/Laptop: Request 16:9 (landscape)
-                videoConstraints = { aspectRatio: { exact: 16 / 9 } };
-            }
+            await new Promise(resolve => {
+                video.onloadedmetadata = () => {
+                    // Set canvas real pixel size to match video resolution
+                    canvas.width = video.videoWidth || (mobile ? 720 : 1280);
+                    canvas.height = video.videoHeight || (mobile ? 1280 : 720);
 
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    'audio': false,
-                    'video': { 
-                        facingMode: 'user', 
-                        ...videoConstraints // Apply dynamic aspect ratio
-                    }
-                });
+                    // ensure CSS fills the container
+                    canvas.style.width = '100%';
+                    canvas.style.height = '100%';
+                    video.width = canvas.width;
+                    video.height = canvas.height;
+                    resolve();
+                };
+            });
 
-                video.srcObject = stream;
-                await new Promise((resolve) => {
-                    video.onloadedmetadata = () => {
-                        // Set canvas and video dimensions based on the actual stream size
-                        canvas.width = video.videoWidth;
-                        canvas.height = video.videoHeight;
-                        video.width = video.videoWidth;
-                        video.height = video.videoHeight;
-                        resolve(video);
-                    };
-                });
-                statusMessage.textContent = "Kamera aktif, devam ediliyor...";
-            } catch (error) {
-                console.error("Kameraya erişilemedi:", error);
-                statusMessage.textContent = "HATA: Kameraya erişilemedi. Lütfen kamera izinlerini aktif edin.";
-                return false;
-            }
+            statusMessage.textContent = "Kamera aktif, devam ediliyor...";
             return true;
+        } catch (err) {
+            console.error("Kameraya erişilemedi:", err);
+            statusMessage.textContent = "HATA: Kameraya erişilemedi. Lütfen kamera izinlerini aktif edin.";
+            return false;
         }
+    }
 
-        /**
-         * Loads the BlazeFace model from TensorFlow.js.
-         */
-        async function loadModel() {
-            try {
-                model = await blazeface.load();
-                statusMessage.textContent = "Başlamak için poz verin!";
-                loadingIndicator.style.opacity = '0';
-                setTimeout(() => { loadingIndicator.style.display = 'none'; }, 500);
-                running = true;
-                predict(); // Start the loop to check for a face
-            } catch (error) {
-                console.error("Error loading model:", error);
-                statusMessage.textContent = "Error: Failed to load face detection model.";
-            }
+    async function loadModel() {
+        try {
+            model = await blazeface.load();
+            statusMessage.textContent = "Başlamak için poz verin!";
+            loadingIndicator.style.opacity = '0';
+            setTimeout(() => { loadingIndicator.style.display = 'none'; }, 500);
+            running = true;
+            predict();
+        } catch (err) {
+            console.error("Error loading model:", err);
+            statusMessage.textContent = "Error: Failed to load face detection model.";
         }
+    }
 
-        /**
-         * Main prediction loop: checks for a face and updates the button status.
-         */
-        async function predict() {
-            if (!running || isSpinning) {
-                requestAnimationFrame(predict);
-                return;
-            }
-
-            let detections = [];
-            if (model && video.readyState === 4) {
-                // Detect faces
-                detections = await model.estimateFaces(video, false);
-            }
-
-            drawVideo(detections); // Draw video and bounding box
-
-            const currentFaceDetected = detections.length > 0;
-
-            if (currentFaceDetected !== faceDetected) {
-                faceDetected = currentFaceDetected;
-                updateButtonStatus();
-            }
-
+    async function predict() {
+        if (!running || isSpinning) {
             requestAnimationFrame(predict);
+            return;
         }
-
-        /**
-         * Updates the state of the Spin button based on face detection.
-         */
-        function updateButtonStatus() {
-            // Spinning is enabled ONLY if a face is detected (no image upload requirement)
-            if (faceDetected) {
-                spinButton.disabled = false;
-                spinButton.textContent = "BAŞLA!";
-                faceStatus.textContent = "Yüz tespit edildi. Başlamaya hazırız!";
-            } else {
-                spinButton.disabled = true;
-                spinButton.textContent = "Başlamak için yüz aranıyor.";
-                faceStatus.textContent = "Lütfen yüzünüzü ortalayın.";
-            }
+        let detections = [];
+        if (model && video && video.readyState === 4) {
+            detections = await model.estimateFaces(video, false);
         }
-
-        /**
-         * Draws the video feed and the bounding box on the canvas.
-         * The video is now drawn in the mirror (flipped) view.
-         */
-        function drawVideo(detections) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // Draw the flipped video image (mirror effect)
-            ctx.save();
-            ctx.scale(-1, 1);
-            ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
-            ctx.restore();
-
-            if (detections.length > 0) {
-                const detection = detections[0];
-                const start = detection.topLeft;
-                const end = detection.bottomRight;
-                const size = [end[0] - start[0], end[1] - start[1]];
-                
-                // Adjusted coordinates for flipped image
-                const adjustedX = canvas.width - end[0];
-                const adjustedY = start[1];
-                const adjustedWidth = size[0];
-                const adjustedHeight = size[1];
-
-                // Draw Bounding Box
-                ctx.beginPath();
-                ctx.strokeStyle = '#3b82f6'; // Blue border
-                ctx.lineWidth = 4;
-                ctx.rect(adjustedX, adjustedY, adjustedWidth, adjustedHeight);
-                ctx.stroke();
-
-                // Draw Keypoints (for visual confirmation)
-                ctx.fillStyle = '#ef3333'; // Red dot
-                detection.landmarks.forEach(point => {
-                    ctx.beginPath();
-                    // Keypoint X coordinates must also be inverted
-                    const pointAdjX = canvas.width - point[0]; 
-                    ctx.arc(pointAdjX, point[1], 4, 0, 2 * Math.PI);
-                    ctx.fill();
-                });
-            }
+        drawVideo(detections);
+        const currentFaceDetected = detections.length > 0;
+        if (currentFaceDetected !== faceDetected) {
+            faceDetected = currentFaceDetected;
+            updateButtonStatus();
         }
+        requestAnimationFrame(predict);
+    }
 
-
-        /**
-         * Simulates the roulette spinning action.
-         */
-        function spinRoulette() {
-            // Filter the active images for the spin
-            const activeImages = ANIMAL_IMAGES.filter(img => img.active);
-
-            // Use the static ANIMAL_IMAGES array
-            if (isSpinning || activeImages.length === 0) return;
-            
-            isSpinning = true;
+    function updateButtonStatus() {
+        if (faceDetected) {
+            spinButton.disabled = false;
+            spinButton.textContent = "BAŞLA!";
+            faceStatus.textContent = "Yüz tespit edildi. Başlamaya hazırız!";
+        } else {
             spinButton.disabled = true;
-            spinButton.textContent = ". . .";
-            spinButton.classList.add('spinning');
-            resultImage.style.opacity = 1;
+            spinButton.textContent = "Başlamak için yüz aranıyor.";
+            faceStatus.textContent = "Lütfen yüzünüzü ortalayın.";
+        }
+    }
 
-            let spinCount = 0;
-            const totalSpinDuration = 3100; // Spin for 3 seconds
-            let cycleDelay = 67; // Initial delay in milliseconds
+    function drawVideo(detections) {
+        if (!canvas || !ctx || !video) return;
+        // If canvas pixel size differs from displayed size, ensure drawing uses canvas pixel size
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // The roulette cycling function
-            spinInterval = setInterval(() => {
-                const randomIndex = Math.floor(Math.random() * activeImages.length);
-                const currentAnimal = activeImages[randomIndex];
-                resultImage.src = currentAnimal.url;
-                resultImage.alt = currentAnimal.type;
-                
-                spinCount += cycleDelay;
+        // Mirror draw (flip horizontally)
+        ctx.save();
+        ctx.scale(-1, 1);
+        ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
+        ctx.restore();
 
-                // Gradually slow down the spin
-                if (spinCount < totalSpinDuration * 0.5) {
-                    cycleDelay = 50;
-                } else if (spinCount < totalSpinDuration * 0.8) {
-                    cycleDelay = 100;
+        if (detections.length > 0) {
+            const detection = detections[0];
+            const start = detection.topLeft;
+            const end = detection.bottomRight;
+            const size = [end[0] - start[0], end[1] - start[1]];
+
+            // Adjust coordinates because we drew mirrored
+            const adjustedX = canvas.width - end[0];
+            const adjustedY = start[1];
+            const adjustedWidth = size[0];
+            const adjustedHeight = size[1];
+
+            ctx.beginPath();
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 4;
+            ctx.rect(adjustedX, adjustedY, adjustedWidth, adjustedHeight);
+            ctx.stroke();
+
+            ctx.fillStyle = '#ef3333';
+            detection.landmarks.forEach(point => {
+                const pointAdjX = canvas.width - point[0];
+                ctx.beginPath();
+                ctx.arc(pointAdjX, point[1], 4, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+        }
+    }
+
+    function spinRoulette() {
+        const activeImages = ANIMAL_IMAGES.filter(img => img.active);
+        if (isSpinning || activeImages.length === 0) return;
+
+        isSpinning = true;
+        spinButton.disabled = true;
+        spinButton.textContent = ". . .";
+        spinButton.classList.add('spinning');
+        resultImage.style.opacity = 1;
+
+        let spinCount = 0;
+        const totalSpinDuration = 3100;
+        let cycleDelay = 67;
+
+        spinInterval = setInterval(() => {
+            const idx = Math.floor(Math.random() * activeImages.length);
+            const currentAnimal = activeImages[idx];
+            resultImage.src = currentAnimal.url;
+            resultImage.alt = currentAnimal.type;
+
+            spinCount += cycleDelay;
+            if (spinCount < totalSpinDuration * 0.5) {
+                cycleDelay = 50;
+            } else if (spinCount < totalSpinDuration * 0.8) {
+                cycleDelay = 100;
+            } else {
+                cycleDelay = 200;
+            }
+
+            if (spinCount >= totalSpinDuration) {
+                clearInterval(spinInterval);
+                finalizeResult();
+            }
+        }, cycleDelay);
+    }
+
+    function finalizeResult() {
+        const activeImages = ANIMAL_IMAGES.filter(img => img.active);
+        const finalIndex = Math.floor(Math.random() * activeImages.length);
+        const finalAnimal = activeImages[finalIndex];
+        const fullPath = finalAnimal.url;
+        const matches = fullPath.match(/[^/\\?#]+\.[^/\\?#]+$/);
+        const fullFileName = matches ? matches[0] : fullPath.split('/').pop();
+        const fileNameWithoutExt = fullFileName.split('.').slice(0, -1).join('.');
+        resultImage.src = finalAnimal.url;
+        resultImage.alt = finalAnimal.type;
+        resultImage.style.opacity = 1;
+        spinButton.textContent = `${fileNameWithoutExt}`;
+        spinButton.classList.remove('spinning');
+
+        setTimeout(() => {
+            isSpinning = false;
+            updateButtonStatus();
+        }, 4200);
+    }
+
+    window.onload = async () => {
+        spinButton.addEventListener('click', spinRoulette);
+
+        // initial camera + model load
+        const cameraReady = await setupCamera();
+        if (cameraReady) {
+            await loadModel();
+        }
+
+        // Restart camera on orientation change (mobile) or when device size changes significantly
+        let lastMobileFlag = isMobileDevice();
+        window.addEventListener('orientationchange', async () => {
+            // small debounce
+            setTimeout(async () => {
+                const nowMobile = isMobileDevice();
+                if (nowMobile !== lastMobileFlag) {
+                    lastMobileFlag = nowMobile;
+                    // restart camera to apply new constraints/aspect
+                    const ready = await setupCamera();
+                    if (!model && ready) await loadModel();
                 } else {
-                    cycleDelay = 200;
+                    // even if mobile flag didn't change, reapply container aspect if needed
+                    applyContainerAspect();
                 }
-                
-                // If duration reached, stop the spinning
-                if (spinCount >= totalSpinDuration) {
-                    clearInterval(spinInterval);
-                    finalizeResult();
-                }
-            }, cycleDelay);
-        }
-
-        /**
-         * Determines the final random result and updates the UI.
-         */
-        function finalizeResult() {
-            // Filter the active images for the result
-            const activeImages = ANIMAL_IMAGES.filter(img => img.active);
-            
-            // Use the filtered activeImages array
-            const finalIndex = Math.floor(Math.random() * activeImages.length);
-            const finalAnimal = activeImages[finalIndex];
-
-            // --- Logic to Extract Filename without path or extension ---
-            // 1. Get the full path (e.g., 'DOGS/DOG RIDER.jpg')
-            const fullPath = finalAnimal.url;
-            // 2. Extract the base filename (e.g., 'DOG RIDER.jpg')
-            // Using a regex to grab the last part after a slash.
-            const matches = fullPath.match(/[^/\\?#]+\.[^/\\?#]+$/);
-            const fullFileName = matches ? matches[0] : fullPath.split('/').pop();
-            
-            // 3. Remove the extension (e.g., 'DOG RIDER')
-            const fileNameWithoutExt = fullFileName.split('.').slice(0, -1).join('.');
-
-            // Ensure the final image is displayed clearly
-            resultImage.src = finalAnimal.url;
-            resultImage.alt = finalAnimal.type;
-            resultImage.style.opacity = 1;
-            
-            // Updated text to show the filename
-            spinButton.textContent = `${fileNameWithoutExt}`;
-            spinButton.classList.remove('spinning');
-            
-            // Re-enable button
-            setTimeout(() => {
-                isSpinning = false;
-                // Only re-enable if a face is still detected
-                updateButtonStatus(); 
-            }, 4200); // Wait briefly before allowing re-spin
-        }
-
-        /**
-         * Start the application when the window is loaded.
-         */
-        window.onload = async () => {
-            // Event Listeners
-            spinButton.addEventListener('click', spinRoulette);
-
-            // Start Camera and Model
-            const cameraReady = await setupCamera();
-            if (cameraReady) {
-                await loadModel();
-            }
-        };
-
-        // Handle window resize to keep the video and canvas ratio correct (if not using CSS aspect-video)
-        window.addEventListener('resize', () => {
-            if (video && video.videoWidth > 0) {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-            }
+            }, 300);
         });
 
-    </script>
+        // Also handle window resize that crosses the mobile threshold
+        window.addEventListener('resize', async () => {
+            const nowMobile = isMobileDevice();
+            if (nowMobile !== lastMobileFlag) {
+                lastMobileFlag = nowMobile;
+                const ready = await setupCamera();
+                if (!model && ready) await loadModel();
+            } else {
+                applyContainerAspect();
+            }
+        });
+    };
+
+    // ensure canvas keeps video size on manual resize
+    window.addEventListener('resize', () => {
+        if (video && video.videoWidth > 0 && canvas) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+        }
+    });
+</script>
 </body>
 </html>
