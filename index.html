@@ -22,12 +22,10 @@
             min-height: 100vh;
             padding: 1rem;
         }
-
-        /* Video/Canvas Base Styling (Mirror Effect Applied) */
+        /* Style for the video and canvas to be contained and responsive */
         #video, #output_canvas {
-            /* RESTORED: Mirror effect for intuitive self-view */
-            transform: none;
-            -webkit-transform: none;
+            transform: none; /* RE-ADDED: Mirror effect is back */
+            -webkit-transform: none; /* RE-ADDED: Mirror effect is back */
             max-width: 100%;
             height: auto;
             border-radius: 0.75rem;
@@ -36,22 +34,6 @@
         #video {
             display: none; /* Hide video element, only canvas is visible */
         }
-
-        /* Aspect Ratio Styles: Default is 16:9 (PC/Landscape) */
-        #video_container {
-            width: 100%;
-            /* Default aspect ratio for PC (16:9) */
-            aspect-ratio: 16 / 9; 
-        }
-
-        /* Media Query for Portrait Devices (Mobile/Tablet) */
-        @media (max-width: 1024px) and (max-aspect-ratio: 1/1) {
-            #video_container {
-                /* Change to aspect ratio 9:16 for portrait devices */
-                aspect-ratio: 9 / 16;
-            }
-        }
-        
         /* Spinner button animation */
         .spinning {
             animation: pulse 1s infinite;
@@ -75,15 +57,14 @@
 </head>
 <body>
 
-    <div id="app" class="w-full max-w-4xl bg-gray-100/75 p-8 rounded-2xl shadow-2xl space-y-8">
+    <div id="app" class="w-full max-w-4xl bg-gray-100/65 p-8 rounded-2xl shadow-2xl space-y-8">
         <h1 class="text-4xl font-extrabold text-center text-indigo-700">Tipine Göre Hangi Hayvansın?</h1>
         <p id="status_message" class="text-center text-gray-600">Kamera Yükleniyor...</p>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
             
             <!-- Video/Canvas Feed -->
-            <!-- Note: aspect-ratio is now controlled by CSS @media queries -->
-            <div id="video_container" class="relative rounded-xl overflow-hidden shadow-lg">
+            <div class="relative w-full aspect-video rounded-xl overflow-hidden shadow-lg">
                 <video id="video" playsinline autoplay></video>
                 <canvas id="output_canvas" class="absolute top-0 left-0 w-full h-full"></canvas>
                 <div id="loading_indicator" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-100/75 rounded-xl transition duration-500">
@@ -100,8 +81,8 @@
                 <div>
                     <h2 class="text-2xl font-bold text-indigo-800 mb-4 text-center">Senin hayvanın:</h2>
                     <div id="roulette_result_container" class="mb-4">
-                        <!-- UPDATED: Initial placeholder set to a valid local image path -->
-                        <img id="result_image" src="CATS/BAĞIRAN KEDİ.png" alt="Roulette Başlangıç Görseli" class="w-124 h-72 object-cover shadow-lg border-4 border-indigo-400 opacity-100">
+                        <!-- UPDATED: Initial placeholder set to a local image path -->
+                        <img id="result_image" src="CATS/placeholder.png" alt="Roulette Başlangıç Görseli" class="w-124 h-72 object-cover shadow-lg border-4 border-indigo-400 opacity-100">
                     </div>
                 </div>
 
@@ -186,7 +167,7 @@
         }
 
         /**
-         * Initializes the video stream from the camera with dynamic aspect ratio constraints.
+         * Initializes the video stream from the camera.
          */
         async function setupCamera() {
             statusMessage.textContent = "Requesting camera access...";
@@ -194,31 +175,15 @@
             canvas = document.getElementById('output_canvas');
             ctx = canvas.getContext('2d');
 
-            // 1. Determine target aspect ratio based on device orientation
-            const isPortraitDevice = window.innerWidth < window.innerHeight;
-            let videoConstraints = {};
-
-            if (isPortraitDevice) {
-                // Phone/Tablet: Request 9:16 (portrait)
-                videoConstraints = { aspectRatio: { exact: 9 / 16 } };
-            } else {
-                // PC/Laptop: Request 16:9 (landscape)
-                videoConstraints = { aspectRatio: { exact: 16 / 9 } };
-            }
-
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
                     'audio': false,
-                    'video': { 
-                        facingMode: 'user', 
-                        ...videoConstraints // Apply dynamic aspect ratio
-                    }
+                    'video': { facingMode: 'user' }
                 });
 
                 video.srcObject = stream;
                 await new Promise((resolve) => {
                     video.onloadedmetadata = () => {
-                        // Set canvas and video dimensions based on the actual stream size
                         canvas.width = video.videoWidth;
                         canvas.height = video.videoHeight;
                         video.width = video.videoWidth;
@@ -302,7 +267,7 @@
         function drawVideo(detections) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // Draw the flipped video image (mirror effect)
+            // Draw the flipped video image (mirror effect is back)
             ctx.save();
             ctx.scale(-1, 1);
             ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
@@ -328,7 +293,7 @@
                 ctx.stroke();
 
                 // Draw Keypoints (for visual confirmation)
-                ctx.fillStyle = '#ef3333'; // Red dot
+                ctx.fillStyle = '#ef4444'; // Red dot
                 detection.landmarks.forEach(point => {
                     ctx.beginPath();
                     // Keypoint X coordinates must also be inverted
