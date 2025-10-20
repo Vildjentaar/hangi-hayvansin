@@ -6,10 +6,14 @@
     <title>VERİ BİLİMİ</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Load TensorFlow.js -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-    <!-- Load the Face Detection Model (BlazeFace) -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface"></script>
+
+    <!-- MediaPipe face detection + helpers -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/face_detection.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <!-- Optional: drawing utils if you want Mediapipe helpers (or draw yourself) -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+
+
     <style>
         /* Custom font and basic body style */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
@@ -31,9 +35,24 @@
             border-radius: 0.75rem;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
         }
+        
+        /* FIX: Ensure video is positioned absolutely but NOT hidden */
         #video {
-            display: none; /* Hide video element, only canvas is visible */
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
         }
+
+        #output_canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
         /* Spinner button animation */
         .spinning {
             animation: pulse 1.1s infinite;
@@ -65,8 +84,9 @@
             
             <!-- Video/Canvas Feed -->
             <div class="relative w-full aspect-video rounded-xl overflow-hidden shadow-lg">
+                <!-- Video is now visible but covered by canvas -->
                 <video id="video" playsinline autoplay></video>
-                <canvas id="output_canvas" class="absolute top-0 left-0 w-full h-full"></canvas>
+                <canvas id="output_canvas"></canvas>
                 <div id="loading_indicator" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-100/75 rounded-xl transition duration-500">
                     <svg class="animate-spin h-8 w-8 text-indigo-500 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -203,106 +223,179 @@
         /**
          * Loads the BlazeFace model from TensorFlow.js.
          */
-        async function loadModel() {
-            try {
-                model = await blazeface.load();
-                statusMessage.textContent = "Başlamak için poz verin!";
-                loadingIndicator.style.opacity = '0';
-                setTimeout(() => { loadingIndicator.style.display = 'none'; }, 500);
-                running = true;
-                predict(); // Start the loop to check for a face
-            } catch (error) {
-                console.error("Error loading model:", error);
-                statusMessage.textContent = "Error: Failed to load face detection model.";
-            }
-        }
+  // --- MediaPipe-based face detection replacement ---
 
-        /**
-         * Main prediction loop: checks for a face and updates the button status.
-         */
-        async function predict() {
-            if (!running || isSpinning) {
-                requestAnimationFrame(predict);
-                return;
-            }
+  let faceDetection;    // MediaPipe FaceDetection instance
+  let mpCamera;         // MediaPipe Camera helper (controls loop)
+  let latestDetections = []; // keep last detections for drawVideo compatibility
 
-            let detections = [];
-            if (model && video.readyState === 4) {
-                // Detect faces
-                detections = await model.estimateFaces(video, false);
-            }
+  async function initMediaPipe() {
+    // Create FaceDetection; locateFile points to CDN files
+    faceDetection = new FaceDetection({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${file}`
+    });
 
-            drawVideo(detections); // Draw video and bounding box
+    // Options: model can be "short" (fast) or "full" (slower, longer range)
+    faceDetection.setOptions({
+      model: 'short',                // 'short' is faster and usually fine for webcam
+      minDetectionConfidence: 0.5
+    });
 
-            const currentFaceDetected = detections.length > 0;
+    // onResults is called every time MediaPipe produces output
+    faceDetection.onResults(onMpResults);
 
-            if (currentFaceDetected !== faceDetected) {
-                faceDetected = currentFaceDetected;
-                updateButtonStatus();
-            }
+    // Start camera loop via Camera utility (runs onFrame -> faceDetection.send)
+    // It handles the requestAnimationFrame loop for us and is efficient.
+    mpCamera = new Camera(video, {
+      onFrame: async () => {
+        // send current video frame to MediaPipe
+        await faceDetection.send({image: video});
+      },
+      width: 1280,
+      height: 720
+    });
 
-            requestAnimationFrame(predict);
-        }
+    // start the camera
+    await mpCamera.start();
 
-        /**
-         * Updates the state of the Spin button based on face detection.
-         */
-        function updateButtonStatus() {
-            // Spinning is enabled ONLY if a face is detected (no image upload requirement)
-            if (faceDetected) {
-                spinButton.disabled = false;
-                spinButton.textContent = "BAŞLA!";
-                faceStatus.textContent = "Yüz tespit edildi. Başlamaya hazırız!";
-            } else {
-                spinButton.disabled = true;
-                spinButton.textContent = "Başlamak için yüz aranıyor.";
-                faceStatus.textContent = "Lütfen yüzünüzü ortalayın.";
-            }
-        }
+    // update UI
+    statusMessage.textContent = "Başlamak için poz verin!";
+    loadingIndicator.style.opacity = '0';
+    setTimeout(() => { loadingIndicator.style.display = 'none'; }, 500);
+    running = true; // keep your existing flags consistent
+    // No manual predict loop needed; drawing is triggered from onResults
+  }
 
-        /**
-         * Draws the video feed and the bounding box on the canvas.
-         * The video is now drawn in the mirror (flipped) view.
-         */
-        function drawVideo(detections) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // Draw the flipped video image (mirror effect is back)
-            ctx.save();
-            ctx.scale(-1, 1);
-            ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
-            ctx.restore();
+  /**
+   * MediaPipe results handler.
+   * results.detections is an array; each detection has boundingBox and landmarks.
+   * We store detections to let your existing drawVideo function render them.
+   */
+  function onMpResults(results) {
+    // results.image is the input frame (we draw video separately, so not required)
+    latestDetections = results.detections || [];
 
-            if (detections.length > 0) {
-                const detection = detections[0];
-                const start = detection.topLeft;
-                const end = detection.bottomRight;
-                const size = [end[0] - start[0], end[1] - start[1]];
-                
-                // Adjusted coordinates for flipped image
-                const adjustedX = canvas.width - end[0];
-                const adjustedY = start[1];
-                const adjustedWidth = size[0];
-                const adjustedHeight = size[1];
+    // Update the faceDetected flag & button status
+    const currentFaceDetected = latestDetections.length > 0;
+    if (currentFaceDetected !== faceDetected) {
+      faceDetected = currentFaceDetected;
+      updateButtonStatus();
+    }
 
-                // Draw Bounding Box
-                ctx.beginPath();
-                ctx.strokeStyle = '#3b82f6'; // Blue border
-                ctx.lineWidth = 4;
-                ctx.rect(adjustedX, adjustedY, adjustedWidth, adjustedHeight);
-                ctx.stroke();
+    // Draw - reuse your drawVideo but pass a conversions-friendly object
+    // Convert mediapipe detections to an array with expected fields
+    const converted = latestDetections.map(det => {
+      // boundingBox might be in pixels (originX/originY/width/height) or normalized.
+      const box = det.boundingBox || {};
+      // If boundingBox.width is <=1 assume normalized coords (0..1)
+      const isNormalized = (box.width && box.width <= 1);
 
-                // Draw Keypoints (for visual confirmation)
-                ctx.fillStyle = '#ef4444'; // Red dot
-                detection.landmarks.forEach(point => {
-                    ctx.beginPath();
-                    // Keypoint X coordinates must also be inverted
-                    const pointAdjX = canvas.width - point[0]; 
-                    ctx.arc(pointAdjX, point[1], 4, 0, 2 * Math.PI);
-                    ctx.fill();
-                });
-            }
-        }
+      const bb = {
+        originX: box.originX ?? (box.xCenter ? box.xCenter - (box.width/2) : 0),
+        originY: box.originY ?? 0,
+        width: box.width ?? 0,
+        height: box.height ?? 0,
+        normalized: isNormalized
+      };
+
+      // some mediapipe builds place landmark arrays in det.landmarks or det.keypoints
+      const rawLandmarks = det.landmarks || det.keypoints || [];
+      const landmarks = rawLandmarks.map(p => ({x: p.x, y: p.y}));
+
+      return { boundingBox: bb, landmarks };
+    });
+
+    // call existing drawing helper but adapted for MediaPipe coordinates
+    drawVideoFromMp(converted);
+  }
+
+  /**
+   * Draw function for MediaPipe detections that mirrors the video (like your original).
+   * Accepts array where each item: { boundingBox: {originX,originY,width,height,normalized}, landmarks: [{x,y}] }
+   */
+  function drawVideoFromMp(detections) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw mirrored video (like before)
+    ctx.save();
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
+    ctx.restore();
+
+    if (!detections || detections.length === 0) return;
+
+    const det = detections[0]; // first face
+    let { originX, originY, width: w, height: h, normalized } = det.boundingBox;
+
+    // 1. If normalized coordinates, convert to pixels
+    if (normalized) {
+      originX = originX * canvas.width;
+      originY = originY * canvas.height;
+      w = w * canvas.width;
+      h = h * canvas.height;
+    }
+    
+    // 2. Horizontal Mirroring
+    const mirroredX = canvas.width - (originX + w);
+
+    // 3. Vertical Correction FIX: Compensate for MediaPipe's box starting too high.
+    // Shift the box down by 5% of its height to center it better around the actual face features.
+    const verticalShift = h * 0.05; 
+    let finalOriginY = originY + verticalShift;
+
+
+    // --- BLUE BOX REMOVED ---
+    /*
+    ctx.beginPath();
+    ctx.strokeStyle = '#3b82f6';
+    ctx.lineWidth = 4;
+    ctx.rect(mirroredX, finalOriginY, w, h); // Use shifted Y coordinate
+    ctx.stroke();
+    */
+    // --- END BLUE BOX REMOVED ---
+
+    // Draw landmarks (mirror X)
+    ctx.fillStyle = '#ef4444';
+    (det.landmarks || []).forEach(pt => {
+      let px = pt.x, py = pt.y;
+      // If normalized coordinates convert
+      if (det.boundingBox.normalized) {
+        px = px * canvas.width;
+        py = py * canvas.height;
+      }
+      // Apply horizontal flip to landmark X coordinate
+      const mirroredPx = canvas.width - px;
+      // Note: We don't apply vertical shift to the landmarks because their Y coordinates
+      // are correct relative to the face features, and the shift is only compensating the box.
+      ctx.beginPath();
+      ctx.arc(mirroredPx, py, 4, 0, 2 * Math.PI);
+      ctx.fill();
+    });
+  }
+
+  // --- Hook into your window.onload flow ---
+  window.addEventListener('load', async () => {
+    // keep the event listener you already had for spin button
+    spinButton.addEventListener('click', spinRoulette);
+
+    // Setup camera metadata (only needed so canvas sizing works)
+    const camOk = await setupCamera(); // re-use your existing setupCamera which sets canvas sizes
+    if (camOk) {
+      // Initialize MediaPipe detector instead of TFJS/blazeface
+      await initMediaPipe();
+    } else {
+      statusMessage.textContent = "Kamera bulunamadı veya izin reddedildi.";
+    }
+  });
+
+  // On window resize keep canvas size synced (unchanged)
+  window.addEventListener('resize', () => {
+    if (video && video.videoWidth > 0) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+    }
+  });
+
 
 
         /**
@@ -391,27 +484,21 @@
         }
 
         /**
-         * Start the application when the window is loaded.
+         * Updates the state of the Spin button based on face detection.
          */
-        window.onload = async () => {
-            // Event Listeners
-            spinButton.addEventListener('click', spinRoulette);
-
-            // Start Camera and Model
-            const cameraReady = await setupCamera();
-            if (cameraReady) {
-                await loadModel();
+        function updateButtonStatus() {
+            if (faceDetected) {
+                spinButton.disabled = false;
+                spinButton.textContent = "BAŞLA!";
+                faceStatus.textContent = "Yüz tespit edildi. Başlamaya hazırız!";
+            } else {
+                spinButton.disabled = true;
+                spinButton.textContent = "Başlamak için yüz aranıyor.";
+                faceStatus.textContent = "Lütfen yüzünüzü ortalayın.";
             }
-        };
-
-        // Handle window resize to keep the video and canvas ratio correct (if not using CSS aspect-video)
-        window.addEventListener('resize', () => {
-            if (video && video.videoWidth > 0) {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-            }
-        });
-
+        }
     </script>
+
+
 </body>
 </html>
